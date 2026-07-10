@@ -1,0 +1,60 @@
+# =============================================================================
+# 開發工作區 Compose 設定
+# 啟動：docker compose up -d --build
+# 進入：docker compose exec workspace bash
+# =============================================================================
+services:
+  workspace:
+    build:
+      # 建置相關檔案（Dockerfile、.dockerignore）集中在 docker/
+      context: docker
+      dockerfile: Dockerfile
+      args:
+        USERNAME: mars
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    image: mars-workspace:ubuntu-24.04
+    container_name: mars-workspace
+    hostname: mars-workspace
+    working_dir: /srv
+    # 保持容器常駐、可互動
+    stdin_open: true
+    tty: true
+    init: true
+    environment:
+      TZ: Asia/Taipei
+    volumes:
+      # 工作目錄：named volume（macOS bind mount 對 npm/composer 大量小檔效能差）
+      # 宿主機存取用 docker compose cp 或容器內 git push
+      - workspace:/srv
+
+      # --- 容器共用開發設定 ---
+      # 使用 PROJECT_ROOT（.env 定義）作為絕對路徑基準
+      # SSH 設定
+      - "${PROJECT_ROOT}/configs/ssh:/home/mars/.ssh"
+      # Git 設定
+      - "${PROJECT_ROOT}/configs/gitconfig:/home/mars/.gitconfig"
+      # AI Agent 共用設定（host ↔ 容器互通）
+      - "${PROJECT_ROOT}/configs/claude.json:/home/mars/.claude.json"
+      - "${PROJECT_ROOT}/.claude:/home/mars/.claude"
+      - "${PROJECT_ROOT}/.codex:/home/mars/.codex"
+      - "${PROJECT_ROOT}/.gemini:/home/mars/.gemini"
+      - "${PROJECT_ROOT}/.config:/home/mars/.config"
+      # AI Agent 全域指示檔：實體檔放在上方各設定目錄內隨目錄掛載進容器，
+      # repo 根目錄的 CLAUDE.md / CODEX.md / GEMINI.md / AGENTS.md 為 symlink 方便編輯
+      # DECISION: 不用檔案級 bind mount 巢狀掛進目錄掛載——Docker Desktop（virtiofs）
+      #           無法在既有 bind mount 內建立 mountpoint，容器會啟動失敗
+
+      # 其餘家目錄（opencode / antigravity 憑證、shell 歷史等）用 named volume 持久化
+      # 首次 up 把空的 named volume 掛到有內容的路徑（/home/mars）時，Docker 會先把
+      # 該路徑的既有內容複製進 volume 再掛上，因此建置時裝好的 CLI 主程式會隨 volume 持久化
+      - mars-home:/home/mars
+    # 需要連宿主機服務（如本機 MySQL/Redis）時，容器內用 host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  # 工作目錄 /srv 持久化空間（工作成果都在這，清除前務必先備份/push）
+  workspace:
+  # mars 家目錄持久化空間（複製行為說明見上方掛載處註解）
+  mars-home:

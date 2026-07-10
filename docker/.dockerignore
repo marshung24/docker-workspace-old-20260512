@@ -1,0 +1,4 @@
+# build context（docker/）只需要 Dockerfile 本身，其餘全部排除
+compose.yaml
+.env
+.dockerignore

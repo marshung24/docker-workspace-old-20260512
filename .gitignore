@@ -1,0 +1,33 @@
+# 憑證與個人設定不入版控（含 SSH 金鑰與 AI CLI 登入 token）
+configs/ssh/*
+!configs/ssh/.gitkeep
+configs/claude.json
+configs/gitconfig
+
+.claude/*
+!.claude/.gitkeep
+!.claude/CLAUDE.md
+!.claude/skills
+.claude/skills/*
+!.claude/skills/.gitkeep
+.codex/*
+!.codex/.gitkeep
+!.codex/AGENTS.md
+!.codex/skills
+.gemini/*
+!.gemini/.gitkeep
+!.gemini/GEMINI.md
+!.gemini/skills
+.config/*
+!.config/.gitkeep
+!.config/opencode
+.config/opencode/*
+!.config/opencode/AGENTS.md
+!.config/opencode/skills
+
+# 暫存檔不進git
+tmp*
+
+
+# 系統設定檔
+.DS_Store
