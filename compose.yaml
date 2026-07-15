@@ -3,16 +3,52 @@
 # 啟動：docker compose up -d --build
 # 進入：docker compose exec workspace bash
 # =============================================================================
+
+# 共用掛載定義：workspace 與 code-server 兩個容器共用同一套 volume / bind mount，
+# 確保兩邊看到的工作目錄與開發設定完全一致（用 YAML anchor 避免重複維護）
+x-shared-volumes: &shared-volumes
+  # 工作目錄：named volume（macOS bind mount 對 npm/composer 大量小檔效能差）
+  # 宿主機存取用 docker compose cp 或容器內 git push
+  - workspace:/srv
+  # 同一 volume 再掛到與宿主機相同的路徑，容器內外路徑一致
+  #（AI Agent session、腳本中的絕對路徑可跨容器/宿主機通用）
+  - workspace:/Users/marshung/workspace
+
+  # --- 容器共用開發設定 ---
+  # 使用 PROJECT_ROOT（.env 定義）作為絕對路徑基準
+  # SSH 設定
+  - "${PROJECT_ROOT}/configs/ssh:/home/mars/.ssh"
+  # Git 設定
+  - "${PROJECT_ROOT}/configs/gitconfig:/home/mars/.gitconfig"
+  # AI Agent 共用設定（host ↔ 容器互通）
+  - "${PROJECT_ROOT}/configs/claude.json:/home/mars/.claude.json"
+  - "${PROJECT_ROOT}/.claude:/home/mars/.claude"
+  - "${PROJECT_ROOT}/.codex:/home/mars/.codex"
+  - "${PROJECT_ROOT}/.gemini:/home/mars/.gemini"
+  - "${PROJECT_ROOT}/.config:/home/mars/.config"
+  # AI Agent 全域指示檔：實體檔放在上方各設定目錄內隨目錄掛載進容器，
+  # repo 根目錄的 CLAUDE.md / CODEX.md / GEMINI.md / AGENTS.md 為 symlink 方便編輯
+  # DECISION: 不用檔案級 bind mount 巢狀掛進目錄掛載——Docker Desktop（virtiofs）
+  #           無法在既有 bind mount 內建立 mountpoint，容器會啟動失敗
+
+  # 其餘家目錄（opencode / antigravity 憑證、shell 歷史等）用 named volume 持久化
+  # 首次 up 把空的 named volume 掛到有內容的路徑（/home/mars）時，Docker 會先把
+  # 該路徑的既有內容複製進 volume 再掛上，因此建置時裝好的 CLI 主程式會隨 volume 持久化
+  - mars-home:/home/mars
+
+# 共用建置定義：兩個服務使用同一個 image（差別只在啟動指令）
+x-shared-build: &shared-build
+  # 建置相關檔案（Dockerfile、.dockerignore）集中在 docker/
+  context: docker
+  dockerfile: Dockerfile
+  args:
+    USERNAME: mars
+    UID: ${UID:-1000}
+    GID: ${GID:-1000}
+
 services:
   workspace:
-    build:
-      # 建置相關檔案（Dockerfile、.dockerignore）集中在 docker/
-      context: docker
-      dockerfile: Dockerfile
-      args:
-        USERNAME: mars
-        UID: ${UID:-1000}
-        GID: ${GID:-1000}
+    build: *shared-build
     image: mars-workspace:ubuntu-24.04
     container_name: mars-workspace
     hostname: mars-workspace
@@ -23,32 +59,30 @@ services:
     init: true
     environment:
       TZ: Asia/Taipei
-    volumes:
-      # 工作目錄：named volume（macOS bind mount 對 npm/composer 大量小檔效能差）
-      # 宿主機存取用 docker compose cp 或容器內 git push
-      - workspace:/srv
+    volumes: *shared-volumes
+    # 需要連宿主機服務（如本機 MySQL/Redis）時，容器內用 host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
-      # --- 容器共用開發設定 ---
-      # 使用 PROJECT_ROOT（.env 定義）作為絕對路徑基準
-      # SSH 設定
-      - "${PROJECT_ROOT}/configs/ssh:/home/mars/.ssh"
-      # Git 設定
-      - "${PROJECT_ROOT}/configs/gitconfig:/home/mars/.gitconfig"
-      # AI Agent 共用設定（host ↔ 容器互通）
-      - "${PROJECT_ROOT}/configs/claude.json:/home/mars/.claude.json"
-      - "${PROJECT_ROOT}/.claude:/home/mars/.claude"
-      - "${PROJECT_ROOT}/.codex:/home/mars/.codex"
-      - "${PROJECT_ROOT}/.gemini:/home/mars/.gemini"
-      - "${PROJECT_ROOT}/.config:/home/mars/.config"
-      # AI Agent 全域指示檔：實體檔放在上方各設定目錄內隨目錄掛載進容器，
-      # repo 根目錄的 CLAUDE.md / CODEX.md / GEMINI.md / AGENTS.md 為 symlink 方便編輯
-      # DECISION: 不用檔案級 bind mount 巢狀掛進目錄掛載——Docker Desktop（virtiofs）
-      #           無法在既有 bind mount 內建立 mountpoint，容器會啟動失敗
-
-      # 其餘家目錄（opencode / antigravity 憑證、shell 歷史等）用 named volume 持久化
-      # 首次 up 把空的 named volume 掛到有內容的路徑（/home/mars）時，Docker 會先把
-      # 該路徑的既有內容複製進 volume 再掛上，因此建置時裝好的 CLI 主程式會隨 volume 持久化
-      - mars-home:/home/mars
+  # code-server：瀏覽器版 VS Code，與 workspace 共用同一套掛載
+  # 開啟：http://localhost:8443（僅綁 127.0.0.1，密碼見 .env 的 CODE_SERVER_PASSWORD）
+  code-server:
+    build: *shared-build
+    image: mars-workspace:ubuntu-24.04
+    container_name: mars-code-server
+    hostname: mars-code-server
+    working_dir: /srv
+    init: true
+    environment:
+      TZ: Asia/Taipei
+      # 登入密碼由 .env 的 CODE_SERVER_PASSWORD 提供（code-server 原生支援 PASSWORD 環境變數）
+      PASSWORD: ${CODE_SERVER_PASSWORD}
+    # DECISION: 用 CLI 參數 + 環境變數取代 config.yaml——設定集中在 compose/.env 單一來源，
+    #           不必再掛一份 config 檔進容器；且僅綁宿主機 127.0.0.1，不對外服務
+    command: ["code-server", "--bind-addr", "0.0.0.0:8443", "--auth", "password", "/srv"]
+    ports:
+      - "127.0.0.1:8443:8443"
+    volumes: *shared-volumes
     # 需要連宿主機服務（如本機 MySQL/Redis）時，容器內用 host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"

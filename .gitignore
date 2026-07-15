@@ -1,4 +1,6 @@
 # 憑證與個人設定不入版控（含 SSH 金鑰與 AI CLI 登入 token）
+# 環境變數含密碼，僅入版控 .env.example 範本
+.env
 configs/ssh/*
 !configs/ssh/.gitkeep
 configs/claude.json

@@ -16,17 +16,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Taipei \
     LANG=C.UTF-8
 
-# 系統套件：基礎工具、網路診斷、Python 3、JDK 11/21、MySQL/Redis Client
+# 系統套件：基礎工具、網路診斷、Python 3、JDK 11/21、Maven、MySQL/Redis Client
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates gnupg sudo tzdata locales \
-        curl wget git zip unzip jq less tree \
+        curl wget git zip unzip jq less tree rsync \
         bash bash-completion openssh-client \
         net-tools iputils-ping dnsutils iproute2 tcpdump \
         nano vim htop \
         graphviz \
         python3 python3-pip python3-venv python-is-python3 \
-        openjdk-11-jdk openjdk-21-jdk \
+        openjdk-11-jdk openjdk-21-jdk maven \
         mysql-client redis-tools && \
     # 設定台北時區
     ln -sf /usr/share/zoneinfo/Asia/Taipei /etc/localtime && \
@@ -41,12 +41,16 @@ RUN apt-get update && \
 RUN ln -s "$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")" /usr/lib/jvm/default
 ENV JAVA_HOME=/usr/lib/jvm/default
 
-# Node.js 22（NodeSource）+ 全域 npm 工具（OpenAI Codex CLI）
+# Node.js 22（NodeSource）+ 全域 npm 工具（Yarn、OpenAI Codex CLI）
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
-    npm install -g @openai/codex && \
+    npm install -g yarn @openai/codex && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# code-server（瀏覽器版 VS Code）— 官方安裝腳本，裝到系統路徑 /usr/bin/code-server
+RUN curl -fsSL https://code-server.dev/install.sh | sh && \
+    rm -rf /var/lib/apt/lists/* ~/.cache
 
 # 全域 shell 體驗：綠色 PS1、常用 alias、啟用 bash-completion
 RUN echo 'export PS1="\[\e[0;32m\]\u:\w\\$\[\e[0m\] "' >> /etc/bash.bashrc && \
@@ -80,6 +84,8 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash
 # opencode
 RUN curl -fsSL https://opencode.ai/install | bash
+# Hermes Agent
+RUN curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 
 # 將各 CLI 的使用者層安裝路徑加入 PATH（非互動 shell 也吃得到）
 ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.opencode/bin:${PATH}"
