@@ -35,6 +35,8 @@ x-shared-volumes: &shared-volumes
   # 首次 up 把空的 named volume 掛到有內容的路徑（/home/mars）時，Docker 會先把
   # 該路徑的既有內容複製進 volume 再掛上，因此建置時裝好的 CLI 主程式會隨 volume 持久化
   - mars-home:/home/mars
+  # Docker socket：容器內可操作宿主機 Docker（docker-in-docker 替代方案）
+  - /var/run/docker.sock:/var/run/docker.sock
 
 # 共用建置定義：兩個服務使用同一個 image（差別只在啟動指令）
 x-shared-build: &shared-build

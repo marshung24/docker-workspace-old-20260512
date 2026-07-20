@@ -48,6 +48,19 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Docker CLI（僅客戶端，不含 daemon）— 透過掛載 docker.sock 操作宿主機 Docker
+# DECISION: 只裝 docker-ce-cli + docker-compose-plugin，不裝 docker-ce（容器內不跑 daemon）
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+      https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
 # code-server（瀏覽器版 VS Code）— 官方安裝腳本，裝到系統路徑 /usr/bin/code-server
 RUN curl -fsSL https://code-server.dev/install.sh | sh && \
     rm -rf /var/lib/apt/lists/* ~/.cache
@@ -67,12 +80,18 @@ RUN userdel -r ubuntu 2>/dev/null || true && \
     groupadd -g "${GID}" "${USERNAME}" && \
     groupadd -f admin && \
     groupadd -f sudouser && \
-    useradd -m -u "${UID}" -g "${GID}" -G admin,sudouser,sudo -s /bin/bash "${USERNAME}" && \
+    groupadd -f docker && \
+    useradd -m -u "${UID}" -g "${GID}" -G admin,sudouser,sudo,docker -s /bin/bash "${USERNAME}" && \
     echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > "/etc/sudoers.d/90-${USERNAME}" && \
     chmod 0440 "/etc/sudoers.d/90-${USERNAME}" && \
     # 工作目錄 /srv 交給 mars
     mkdir -p /srv && \
     chown "${UID}:${GID}" /srv
+
+# 容器啟動入口：修正 Docker socket 權限等初始化動作
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+ENTRYPOINT ["entrypoint.sh"]
 
 # 以 mars 身分安裝 AI Agent CLI（安裝腳本會裝到使用者家目錄）
 USER ${USERNAME}
