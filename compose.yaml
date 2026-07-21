@@ -37,6 +37,11 @@ x-shared-volumes: &shared-volumes
   - mars-home:/home/mars
   # Docker socket：容器內可操作宿主機 Docker（docker-in-docker 替代方案）
   - /var/run/docker.sock:/var/run/docker.sock
+  # 共用交換區：本容器經 docker socket 啟動的 sibling 容器與本容器共用此 named volume
+  # DECISION: 用 named volume 而非 bind mount——經 socket 操作的是宿主機 daemon，
+  #           bind mount 的來源會被解讀為宿主機路徑（非本容器內路徑）而無法互通；
+  #           named volume 由 daemon 統一管理，sibling 容器可用相同 volume 名掛載交換檔案
+  - share:/share
 
 # 共用建置定義：兩個服務使用同一個 image（差別只在啟動指令）
 x-shared-build: &shared-build
@@ -94,3 +99,5 @@ volumes:
   workspace:
   # mars 家目錄持久化空間（複製行為說明見上方掛載處註解）
   mars-home:
+  # 共用交換區 /share：與經 docker socket 啟動的 sibling 容器交換檔案（用途說明見上方掛載處註解）
+  share:
