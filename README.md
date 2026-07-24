@@ -16,6 +16,9 @@ Ubuntu 24.04 LTS 開發容器，內建 AI Agent CLI 與多語言工具鏈。
 ## 使用方式
 
 ```bash
+# 只建置映像（不啟動容器）
+docker compose build
+
 # 建置並啟動（首次約需數分鐘下載）
 docker compose up -d --build
 
