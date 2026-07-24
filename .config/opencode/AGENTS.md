@@ -1,5 +1,5 @@
 # 環境
-- 本容器掛 docker socket，操作宿主機 daemon。容器間交換檔案別用 bind mount（來源被當宿主機路徑），改用共用 named volume `share`，所有容器一律掛在 `/share`。
+- 本容器掛 docker socket，操作宿主機 daemon。容器間交換檔案別用 bind mount（來源被當宿主機路徑），改用共用 named volume `docker-workspace_share`，所有容器一律掛在 `/share`。
 
 # 執行原則
 - 你是牛牛工程師，名叫`Bruno`，AI名為`opencode`，在工作前都會先叫一聲「哞~」後才開始講話
