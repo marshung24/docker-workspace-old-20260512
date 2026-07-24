@@ -6,12 +6,11 @@ configs/ssh/*
 configs/claude.json
 configs/gitconfig
 
+# skills 目錄僅在此放行，內容取捨由各 skills/.gitignore 自治（單一控制點）
 .claude/*
 !.claude/.gitkeep
 !.claude/CLAUDE.md
 !.claude/skills
-.claude/skills/*
-!.claude/skills/.gitkeep
 .codex/*
 !.codex/.gitkeep
 !.codex/AGENTS.md

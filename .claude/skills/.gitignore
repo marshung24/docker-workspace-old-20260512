@@ -1,0 +1,7 @@
+# 排除所有 skill
+*
+
+# 本檔要進git
+!.gitignore
+
+
