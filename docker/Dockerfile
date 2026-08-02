@@ -25,6 +25,7 @@ RUN apt-get update && \
         net-tools iputils-ping dnsutils iproute2 tcpdump \
         nano vim htop \
         graphviz \
+        inotify-tools \
         python3 python3-pip python3-venv python-is-python3 \
         openjdk-11-jdk openjdk-21-jdk maven \
         mysql-client redis-tools && \
@@ -58,6 +59,35 @@ RUN install -m 0755 -d /etc/apt/keyrings && \
       > /etc/apt/sources.list.d/docker.list && \
     apt-get update && \
     apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# GitHub CLI（gh）— 官方 apt 來源，供操作 GitHub PR/Issue 等
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
+    chmod a+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] \
+      https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends gh && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# GitLab CLI（glab）— GitLab 未提供官方 apt repo，改抓固定版本的 Release .deb 安裝
+# DECISION: 版本號寫死（非動態解析 permalink/latest 重導向）並比對官方 checksums.txt——
+#           原本用重導向解析最新版號的寫法沒有 pin 版本也沒驗證完整性，建置不可重現，
+#           GitLab 改頁面結構或 asset 命名就會裝失敗；升版時手動更新 GLAB_VERSION 即可
+ARG GLAB_VERSION=1.111.0
+RUN ARCH=$(dpkg --print-architecture) && \
+    GLAB_DEB="glab_${GLAB_VERSION}_linux_${ARCH}.deb" && \
+    GLAB_BASE_URL="https://gitlab.com/gitlab-org/cli/-/releases/v${GLAB_VERSION}/downloads" && \
+    curl -fsSL -o "/tmp/${GLAB_DEB}" "${GLAB_BASE_URL}/${GLAB_DEB}" && \
+    curl -fsSL -o /tmp/glab_checksums.txt "${GLAB_BASE_URL}/checksums.txt" && \
+    (cd /tmp && grep " ${GLAB_DEB}\$" glab_checksums.txt | sha256sum -c -) && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends "/tmp/${GLAB_DEB}" && \
+    rm -f "/tmp/${GLAB_DEB}" /tmp/glab_checksums.txt && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 

@@ -8,10 +8,10 @@ Ubuntu 24.04 LTS 開發容器，內建 AI Agent CLI 與多語言工具鏈。
 |------|------|
 | OS | Ubuntu 24.04 LTS（時區 Asia/Taipei） |
 | 帳號 | `mars`（附加群組 `admin`、`sudouser`、`sudo`，免密碼 sudo） |
-| 工作目錄 | `/srv`（bind mount 自 `./workspace/`） |
+| 工作目錄 | `/srv`（named volume `workspace`） |
 | AI CLI | Claude Code（`claude`）、Antigravity CLI（`agy`）、opencode、Codex（`codex`） |
 | Runtime | Node.js 22、Python 3、JDK 11 / 21（預設 21） |
-| 工具 | zip/unzip、curl/wget、git、mysql client、redis-tools、vim/nano、htop、tcpdump、graphviz 等 |
+| 工具 | zip/unzip、curl/wget、git、GitHub CLI（`gh`）、GitLab CLI（`glab`）、mysql client、redis-tools、vim/nano、htop、tcpdump、inotify-tools、graphviz 等 |
 
 ## 使用方式
 
