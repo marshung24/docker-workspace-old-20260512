@@ -53,6 +53,10 @@ x-shared-build: &shared-build
     UID: ${UID:-1000}
     GID: ${GID:-1000}
 
+# 共用網路定義：加入 proxy 網路才會被 Traefik 探索到（docker provider 依網路名稱找容器）
+x-shared-networks: &shared-networks
+  - proxy
+
 services:
   workspace:
     build: *shared-build
@@ -66,7 +70,11 @@ services:
     init: true
     environment:
       TZ: Asia/Taipei
+      # 讓容器內執行的 docker compose／docker run 能直接用 ${BASE_DOMAIN}／$BASE_DOMAIN
+      # 代入 Traefik router label，不用另外查詢（見 .claude/CLAUDE.md 等指令檔說明）
+      BASE_DOMAIN: ${BASE_DOMAIN}
     volumes: *shared-volumes
+    networks: *shared-networks
     # 需要連宿主機服務（如本機 MySQL/Redis）時，容器內用 host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -84,20 +92,105 @@ services:
       TZ: Asia/Taipei
       # 登入密碼由 .env 的 CODE_SERVER_PASSWORD 提供（code-server 原生支援 PASSWORD 環境變數）
       PASSWORD: ${CODE_SERVER_PASSWORD}
+      # 讓容器內執行的 docker compose／docker run 能直接用 ${BASE_DOMAIN}／$BASE_DOMAIN
+      # 代入 Traefik router label，不用另外查詢（見 .claude/CLAUDE.md 等指令檔說明）
+      BASE_DOMAIN: ${BASE_DOMAIN}
     # DECISION: 用 CLI 參數 + 環境變數取代 config.yaml——設定集中在 compose/.env 單一來源，
     #           不必再掛一份 config 檔進容器；且僅綁宿主機 127.0.0.1，不對外服務
     command: ["code-server", "--bind-addr", "0.0.0.0:8443", "--auth", "password", "/srv"]
     ports:
       - "127.0.0.1:8443:8443"
     volumes: *shared-volumes
+    networks: *shared-networks
     # 需要連宿主機服務（如本機 MySQL/Redis）時，容器內用 host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Traefik 路由標籤：改用真網域 + Let's Encrypt 憑證存取，免處理自簽憑證信任問題
+    # 8443 埠仍保留直連，Traefik 為額外途徑非取代
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.code-server.rule=Host(`code-server.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.code-server.entrypoints=websecure"
+      - "traefik.http.routers.code-server.tls=true"
+      - "traefik.http.services.code-server.loadbalancer.server.port=8443"
+
+  # Traefik：通用反向代理，經 docker socket 探索容器（含本機經 socket 啟動的 sibling 容器）
+  # 依 label 自動路由，不用手動管理埠號對應
+  # 開啟：https://<router-rule 對應的 host>（websecure）、https://traefik.${BASE_DOMAIN}（dashboard）
+  traefik:
+    # DECISION: 固定 v3.6（非 v3.5）——v3.5 的 docker client 內部寫死 API 版本 1.24，
+    #           不吃 DOCKER_API_VERSION 環境變數，Docker Desktop 29 起最低支援版本
+    #           拉到 1.40 會直接連不上 docker.sock（400 Bad Request），v3.6 已修復
+    #           （見 traefik/traefik#12253）
+    image: traefik:v3.6
+    container_name: mars-traefik
+    hostname: mars-traefik
+    command:
+      # docker provider：exposedbydefault=false，容器需自行加 traefik.enable=true 才會被路由，
+      # 避免宿主機上其他無關容器被誤路由進來
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=docker-workspace_proxy"
+      # web(80) 全部導向 websecure(443)，不提供明文 HTTP 服務
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      # DECISION: 萬用字元憑證僅能用 DNS-01 驗證（HTTP-01 不支援 *.domain），
+      #           改用 Cloudflare API Token 讓 Traefik 自動建立/清除驗證用 TXT 紀錄，
+      #           不需對外開放 80/443 即可完成驗證與自動續期
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.letsencrypt.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
+      # Dashboard／API：不對外開埠，改由 Traefik 自己的 router 導向 api@internal 經網域存取
+      - "--api.dashboard=true"
+    environment:
+      # Cloudflare API Token（該 zone 的 Zone:Zone:Read + Zone:DNS:Edit 權限：前者查 zone ID、
+      # 後者建 TXT 驗證紀錄，缺一會 403），值放在 .env 不入版控
+      CF_DNS_API_TOKEN: ${CF_DNS_API_TOKEN}
+    ports:
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    volumes:
+      # DECISION: :ro 只擋容器改掛載路徑本身（unlink/chmod），不是 Docker API 唯讀——連得到
+      #           socket 一樣能發完整的 API request（含寫入類操作）。這裡沒有另外收斂成
+      #           docker-socket-proxy，純粹是掛載旗標防手滑，不要誤以為這樣就無寫入風險
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # 憑證持久化：避免每次重建容器都重新申請（Let's Encrypt 有申請頻率限制）
+      - traefik-acme:/letsencrypt
+    networks: *shared-networks
+    # Dashboard 路由：Traefik 經 docker provider 探索到自己的容器，把 label 導向內建的
+    # api@internal service（非一般容器 port，故不用宣告 loadbalancer.server.port）
+    # DECISION: 使用者已知悉此路由不加認證，僅靠網域不公開對外解析來限縮存取範圍
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls=true"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      # DECISION: 萬用字元憑證用 tls.stores.default.defaultGeneratedCert 簽發，不綁在
+      #           任何單一 router 上——entrypoint 層級的 tls.domains/certresolver、或
+      #           router 上單獨宣告 tls.domains／tls.certresolver，實測都無法正確簽出
+      #           萬用字元憑證（見 traefik/traefik#12109，上游尚未解決）。其餘 router
+      #           只要 tls=true，會透過 SNI 自動吃到 default store 裡的這張憑證
+      - "traefik.tls.stores.default.defaultgeneratedcert.resolver=letsencrypt"
+      - "traefik.tls.stores.default.defaultgeneratedcert.domain.main=${BASE_DOMAIN}"
+      - "traefik.tls.stores.default.defaultgeneratedcert.domain.sans=*.${BASE_DOMAIN}"
 
 volumes:
   # 工作目錄 /srv 持久化空間（工作成果都在這，清除前務必先備份/push）
   workspace:
   # mars 家目錄持久化空間（複製行為說明見上方掛載處註解）
   mars-home:
+  # Traefik 的 Let's Encrypt 憑證持久化空間（acme.json，含私鑰，不可外流）
+  traefik-acme:
   # 共用交換區 /share：與經 docker socket 啟動的 sibling 容器交換檔案（用途說明見上方掛載處註解）
   share:
+
+networks:
+  # 共用反代網路：Traefik 與經 docker socket 啟動的 sibling 容器都掛在這，
+  # sibling 容器只要加入本網路（--network docker-workspace_proxy）並加上 traefik.* label 即可自動被路由
+  proxy:
+    name: docker-workspace_proxy

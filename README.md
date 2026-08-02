@@ -31,6 +31,58 @@ docker compose down
 
 > Linux 宿主機請先把 `.env` 的 `UID`/`GID` 改成 `id -u` / `id -g` 的結果；macOS 維持預設即可。
 
+## Traefik 反向代理
+
+`traefik` 服務經 docker socket 探索容器並依 label 自動路由，不用手動管理埠號對應。憑證用真網域
+`${BASE_DOMAIN}` / `*.${BASE_DOMAIN}`（`.env` 設定，如 `local.marsictech.net`），向 Let's Encrypt
+自動申請與續期（DNS-01，Cloudflare API Token 驗證），瀏覽器存取免處理自簽憑證信任問題：
+
+| 用途 | 存取方式 |
+|------|----------|
+| code-server | https://code-server.\<BASE_DOMAIN\>（例：https://code-server.local.marsictech.net） |
+| Dashboard（路由狀態、除錯用） | https://traefik.\<BASE_DOMAIN\>（例：https://traefik.local.marsictech.net） |
+
+80 埠會全部導向 443（明文 HTTP 一律轉 HTTPS）；80/443 僅綁 `127.0.0.1`，不對外網開放。Dashboard
+不掛額外驗證，僅靠網域不對外公開解析來限縮存取範圍。
+
+### 憑證設定（`.env`）
+
+| 變數 | 用途 |
+|------|------|
+| `BASE_DOMAIN` | 根網域，萬用字元憑證與所有 router 的 Host 規則都以此為準 |
+| `ACME_EMAIL` | Let's Encrypt 註冊信箱，憑證異常/到期通知用 |
+| `CF_DNS_API_TOKEN` | Cloudflare API Token，需有 `BASE_DOMAIN` 所屬 zone 的 `Zone:Zone:Read` + `Zone:DNS:Edit` 權限（lego 的 Cloudflare provider 查 zone ID 要 `Zone:Read`，建 TXT 紀錄要 `DNS:Edit`，兩者缺一會 403） |
+
+憑證檔（`acme.json`，含私鑰）存在 named volume `traefik-acme`，重建容器不會遺失、也不會重新申請
+（Let's Encrypt 申請有頻率限制）；只有 `docker compose down -v` 或手動刪 volume 才會清掉。
+
+DNS-01 驗證只需 Cloudflare API 能通，不需對外開放 80/443，所以即使埠僅綁 `127.0.0.1` 也能正常
+申請與續期憑證。但目前 80/443 僅綁 `127.0.0.1`，只有 Docker host 本機能連得到——若要讓區網其他
+裝置也能存取，除了把 `BASE_DOMAIN` 的 DNS 紀錄指到內網 IP，還得把 port binding 改成綁 LAN IP
+或 `0.0.0.0`，並補上 Dashboard 的驗證（目前僅靠網域不公開解析防護，見下方存取方式的說明）。
+
+新增服務要套用同一張萬用字元憑證，只要 router 掛在 `websecure` entrypoint 並開 TLS 即可，
+不用再各自宣告 `tls.domains` 或 `tls.certresolver`（萬用字元憑證已由 `traefik` 服務自身的
+`tls.stores.default.defaultGeneratedCert` label 設好，其餘 router 會透過 SNI 自動套用）：
+
+```
+traefik.enable=true
+traefik.http.routers.<name>.rule=Host(`<name>.${BASE_DOMAIN}`)
+traefik.http.routers.<name>.entrypoints=websecure
+traefik.http.routers.<name>.tls=true
+traefik.http.services.<name>.loadbalancer.server.port=<容器內部服務埠>
+```
+
+要讓其他經 docker socket 啟動的 sibling 容器也被路由，該容器還需加入 `docker-workspace_proxy`
+網路（`docker run --network docker-workspace_proxy ...`，或在自家 compose 用下列寫法）：
+
+```yaml
+networks:
+  default:
+    name: docker-workspace_proxy
+    external: true
+```
+
 ## 持久化設計
 
 掛載路徑以 `.env` 的 `PROJECT_ROOT` 為基準（預設 `.`＝本目錄，跨專案共用設定時可改為絕對路徑）。
