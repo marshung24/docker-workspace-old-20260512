@@ -133,8 +133,6 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash
 # opencode
 RUN curl -fsSL https://opencode.ai/install | bash
-# Hermes Agent
-RUN curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
 
 # 將各 CLI 的使用者層安裝路徑加入 PATH（非互動 shell 也吃得到）
 ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.opencode/bin:${PATH}"
