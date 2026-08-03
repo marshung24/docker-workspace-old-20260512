@@ -26,6 +26,7 @@ RUN apt-get update && \
         nano vim htop \
         graphviz \
         inotify-tools \
+        direnv \
         python3 python3-pip python3-venv python-is-python3 \
         openjdk-11-jdk openjdk-21-jdk maven \
         mysql-client redis-tools && \
@@ -105,13 +106,16 @@ RUN ARCH=$(dpkg --print-architecture) && \
 RUN curl -fsSL https://code-server.dev/install.sh | sh && \
     rm -rf /var/lib/apt/lists/* ~/.cache
 
-# 全域 shell 體驗：綠色 PS1、常用 alias、啟用 bash-completion
+# 全域 shell 體驗：綠色 PS1、常用 alias、啟用 bash-completion、direnv hook
+# direnv hook 要掛在互動 shell 才會生效（cd 進目錄時自動 load/unload .envrc），
+# 非互動 shell（如 RUN、entrypoint exec）不受影響
 RUN echo 'export PS1="\[\e[0;32m\]\u:\w\\$\[\e[0m\] "' >> /etc/bash.bashrc && \
     echo 'alias ll="ls -l"' >> /etc/bash.bashrc && \
     echo 'alias la="ls -la"' >> /etc/bash.bashrc && \
     echo 'if [ -f /usr/share/bash-completion/bash_completion ]; then' >> /etc/bash.bashrc && \
     echo '    . /usr/share/bash-completion/bash_completion' >> /etc/bash.bashrc && \
-    echo 'fi' >> /etc/bash.bashrc
+    echo 'fi' >> /etc/bash.bashrc && \
+    echo 'eval "$(direnv hook bash)"' >> /etc/bash.bashrc
 
 # 建立使用者 mars（附加群組 admin / sudouser / sudo，免密碼 sudo）
 # DECISION: Ubuntu 24.04 基底映像內建 ubuntu 帳號佔用 UID/GID 1000，先移除以釋出
@@ -143,9 +147,12 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 RUN curl -fsSL https://antigravity.google/cli/install.sh | bash
 # opencode
 RUN curl -fsSL https://opencode.ai/install | bash
+# bun — 不是給使用者直接用的 CLI，是 Claude Code telegram plugin 的 MCP server 執行環境
+# （plugin 內部用 `bun run` 啟動，缺這個 telegram MCP 會顯示 ENOENT: bun not found）
+RUN curl -fsSL https://bun.sh/install | bash
 
 # 將各 CLI 的使用者層安裝路徑加入 PATH（非互動 shell 也吃得到）
-ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.opencode/bin:${PATH}"
+ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.opencode/bin:/home/${USERNAME}/.bun/bin:${PATH}"
 
 WORKDIR /srv
 
