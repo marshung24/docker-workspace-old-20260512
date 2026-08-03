@@ -1,0 +1,73 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["typer"]
+# ///
+# ============================================================
+# dw — docker-workspace 指令工具（Make 支援的替代方案）
+# ============================================================
+# 用途：取代 Makefile，提供分類子指令 + --help，同時解決 Make 原生
+#       不支援 `target arg1 arg2` 這種子指令傳參的問題（typer 原生支援）
+#
+# 執行方式：shebang 用 `uv run --script`，依 PEP 723 inline metadata
+#           自動建立/快取一次性 venv 並裝好 typer，不用手動 pip install
+#
+# 安裝：本檔案所在目錄（tools/setting/）已由 repo 根目錄 .envrc 的
+#       `PATH_add tools/setting` 加進 PATH，direnv allow 過即可直接
+#       打 `dw <command>`，不用打完整路徑
+# ============================================================
+
+import subprocess
+import sys
+from pathlib import Path
+
+import typer
+
+# repo 根目錄：從本檔案位置往上兩層推算（tools/setting/dw → repo root），
+# 不依賴呼叫時的當前工作目錄，在 repo 內任何子目錄呼叫 dw 都能正確定位
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+PLAYWRIGHT_DIR = REPO_ROOT / "tools" / "playwright"
+
+app = typer.Typer(help="docker-workspace 指令工具（Make 支援的替代方案）")
+playwright_app = typer.Typer(help="Playwright Browser Host 生命週期管理")
+app.add_typer(playwright_app, name="playwright")
+
+
+def _run_script(script_name: str) -> None:
+    """執行 tools/playwright/ 下的既有 shell 腳本，原樣轉發 stdout/stderr 與 exit code
+
+    I/O：script_name（腳本檔名，如 "start.sh"）→ 無回傳值，腳本非 0 結束碼時
+         直接以相同 code 結束本程式（sys.exit），讓 shell 呼叫端能正確判斷成敗
+    """
+    script_path = PLAYWRIGHT_DIR / script_name
+    result = subprocess.run(["bash", str(script_path)])
+    if result.returncode != 0:
+        sys.exit(result.returncode)
+
+
+@playwright_app.command()
+def setup() -> None:
+    """安裝 Playwright 套件與 Chromium（Host 端，僅需一次）"""
+    _run_script("setup.sh")
+
+
+@playwright_app.command()
+def start() -> None:
+    """啟動 Browser Host（背景執行，lazy mode）"""
+    _run_script("start.sh")
+
+
+@playwright_app.command()
+def stop() -> None:
+    """停止 Browser Host"""
+    _run_script("stop.sh")
+
+
+@playwright_app.command()
+def status() -> None:
+    """查看 Browser Host 執行狀態"""
+    _run_script("status.sh")
+
+
+if __name__ == "__main__":
+    app()

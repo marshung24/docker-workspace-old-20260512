@@ -150,6 +150,9 @@ RUN curl -fsSL https://opencode.ai/install | bash
 # bun — 不是給使用者直接用的 CLI，是 Claude Code telegram plugin 的 MCP server 執行環境
 # （plugin 內部用 `bun run` 啟動，缺這個 telegram MCP 會顯示 ENOENT: bun not found）
 RUN curl -fsSL https://bun.sh/install | bash
+# uv — tools/setting/dw（Python CLI，取代 Make）的 shebang 用 `uv run --script`
+# 依 PEP 723 inline metadata 自動建 venv、裝相依套件，不用手動 pip install
+RUN curl -fsSL https://astral.sh/uv/install.sh | sh
 
 # 將各 CLI 的使用者層安裝路徑加入 PATH（非互動 shell 也吃得到）
 ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.opencode/bin:/home/${USERNAME}/.bun/bin:${PATH}"
