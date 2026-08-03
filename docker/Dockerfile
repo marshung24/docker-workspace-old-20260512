@@ -49,6 +49,16 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
+# Playwright client library（僅 client，不含 browser binary）
+# DECISION: 瀏覽器實體跑在 macOS Host 端（見 tools/playwright/browser-host.js），容器內
+#           AI Agent 透過 PLAYWRIGHT_WS_ENDPOINT（host.docker.internal）遠端操控——好處是
+#           工程師可直接在 Host 觀察/接手 headed browser，也省下容器內裝 Chromium 的體積
+#           （PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 跳過 postinstall 下載，省 ~400-900MB）。
+#           版本需與 tools/playwright/package.json 一致（SSOT），升級時兩處同步改
+ARG PLAYWRIGHT_VERSION=1.62.1
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN npm install -g playwright@${PLAYWRIGHT_VERSION}
+
 # Docker CLI（僅客戶端，不含 daemon）— 透過掛載 docker.sock 操作宿主機 Docker
 # DECISION: 只裝 docker-ce-cli + docker-compose-plugin，不裝 docker-ce（容器內不跑 daemon）
 RUN install -m 0755 -d /etc/apt/keyrings && \

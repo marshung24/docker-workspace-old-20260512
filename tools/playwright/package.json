@@ -1,0 +1,12 @@
+{
+  "name": "docker-workspace-playwright-browser-host",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node browser-host.js",
+    "setup": "npm install && npx playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "1.62.1"
+  }
+}

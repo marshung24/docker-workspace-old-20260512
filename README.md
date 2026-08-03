@@ -83,6 +83,55 @@ networks:
     external: true
 ```
 
+## Playwright 瀏覽器自動化
+
+`tools/playwright/` 提供 AI Agent 操控瀏覽器的能力，架構是 **Host 端跑瀏覽器、容器內只裝
+client**：
+
+```
+Host (macOS)
+├── browser-host.js（Lazy Launch）
+│   TCP Server（PLAYWRIGHT_HOST_PORT，預設 3910，常駐）→ Chromium（按需啟動，閒置自動關閉）
+│   ws://127.0.0.1:3910/playwright
+│
+Docker 容器（workspace / code-server）
+├── Playwright client（無 browser binary，PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1）
+│   ws://host.docker.internal:3910/playwright
+└── Claude Code：容器啟動時 entrypoint 自動註冊 MCP server
+    （npx @playwright/mcp --endpoint ... --isolated，見 docker/entrypoint.sh）
+```
+
+**為什麼瀏覽器跑在 Host、不跑在容器內：** 容器內跑 headed browser 要處理 Xvfb/X11/字型等一堆
+環境問題，工程師也看不到 Agent 在幹嘛；Host 端 headed 模式工程師可以直接觀察、需要時（如輸入
+MFA）可以人工接手，容器內也不用背 Chromium 的體積（client-only 省 ~400-900MB）。
+
+### 首次設定（Host 端，僅需一次）
+
+```bash
+bash tools/playwright/setup.sh   # 裝 Playwright npm 套件 + 下載 Chromium（~400MB）
+bash tools/playwright/start.sh   # 背景啟動 browser host（lazy mode，不會立刻開瀏覽器視窗）
+```
+
+常用指令：`bash tools/playwright/status.sh`、`bash tools/playwright/stop.sh`。服務常駐監聽，
+Chromium 依連線數量按需啟動/關閉；`docker compose down`／重開機不會自動帶起，需要時手動
+`start.sh` 一次即可，重建容器不影響（Host 端服務跟容器生命週期無關）。
+
+### 容器內怎麼用
+
+- `PLAYWRIGHT_WS_ENDPOINT` 環境變數已注入 workspace／code-server（`ws://host.docker.internal:<PLAYWRIGHT_HOST_PORT>/playwright`），容器內的 `playwright` npm 套件用 `chromium.connect(process.env.PLAYWRIGHT_WS_ENDPOINT)` 直接連。
+- **Claude Code**：容器啟動時 `entrypoint.sh` 會自動跑一次 `claude mcp add`（已註冊過會跳過），不用手動設定，直接請 Claude 用瀏覽器操作即可。
+- **Codex／Gemini／opencode**：目前沒有自動註冊，需要的話比照 Claude 的參數自行加 MCP server：`npx -y @playwright/mcp@0.0.78 --endpoint $PLAYWRIGHT_WS_ENDPOINT --isolated`（各自設定檔格式不同：`.codex/config.toml`、`.gemini/settings.json` 的 `mcpServers` 等）。
+
+### 版本管理（SSOT）
+
+`playwright` 版本要跟 `docker/Dockerfile` 的 `PLAYWRIGHT_VERSION` ARG 一致（否則 Host 端啟動
+Chromium 的通訊協定可能跟容器內 client 對不上），升版時兩處同步改：
+
+| 位置 | 用途 |
+|------|------|
+| `tools/playwright/package.json` | Host 端 browser server |
+| `docker/Dockerfile`（`ARG PLAYWRIGHT_VERSION`） | 容器內 client |
+
 ## 持久化設計
 
 掛載路徑以 `.env` 的 `PROJECT_ROOT` 為基準（預設 `.`＝本目錄，跨專案共用設定時可改為絕對路徑）。

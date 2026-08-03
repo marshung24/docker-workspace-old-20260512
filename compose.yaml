@@ -73,9 +73,13 @@ services:
       # 讓容器內執行的 docker compose／docker run 能直接用 ${BASE_DOMAIN}／$BASE_DOMAIN
       # 代入 Traefik router label，不用另外查詢（見 .claude/CLAUDE.md 等指令檔說明）
       BASE_DOMAIN: ${BASE_DOMAIN}
+      # Playwright MCP／client 連 Host 端瀏覽器用（見 tools/playwright/），瀏覽器實體
+      # 不在容器內，容器只是連過去操控
+      PLAYWRIGHT_WS_ENDPOINT: ws://host.docker.internal:${PLAYWRIGHT_HOST_PORT:-3910}/playwright
     volumes: *shared-volumes
     networks: *shared-networks
-    # 需要連宿主機服務（如本機 MySQL/Redis）時，容器內用 host.docker.internal
+    # 需要連宿主機服務（如本機 MySQL/Redis、Playwright Browser Host）時，容器內用
+    # host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -95,6 +99,9 @@ services:
       # 讓容器內執行的 docker compose／docker run 能直接用 ${BASE_DOMAIN}／$BASE_DOMAIN
       # 代入 Traefik router label，不用另外查詢（見 .claude/CLAUDE.md 等指令檔說明）
       BASE_DOMAIN: ${BASE_DOMAIN}
+      # Playwright MCP／client 連 Host 端瀏覽器用（見 tools/playwright/），瀏覽器實體
+      # 不在容器內，容器只是連過去操控
+      PLAYWRIGHT_WS_ENDPOINT: ws://host.docker.internal:${PLAYWRIGHT_HOST_PORT:-3910}/playwright
     # DECISION: 用 CLI 參數 + 環境變數取代 config.yaml——設定集中在 compose/.env 單一來源，
     #           不必再掛一份 config 檔進容器；且僅綁宿主機 127.0.0.1，不對外服務
     command: ["code-server", "--bind-addr", "0.0.0.0:8443", "--auth", "password", "/srv"]
@@ -102,7 +109,8 @@ services:
       - "127.0.0.1:8443:8443"
     volumes: *shared-volumes
     networks: *shared-networks
-    # 需要連宿主機服務（如本機 MySQL/Redis）時，容器內用 host.docker.internal
+    # 需要連宿主機服務（如本機 MySQL/Redis、Playwright Browser Host）時，容器內用
+    # host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Traefik 路由標籤：改用真網域 + Let's Encrypt 憑證存取，免處理自簽憑證信任問題
