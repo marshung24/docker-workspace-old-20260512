@@ -11,6 +11,7 @@ configs/gitconfig
 !.claude/.gitkeep
 !.claude/CLAUDE.md
 !.claude/skills
+!.claude/settings.json
 .codex/*
 !.codex/.gitkeep
 !.codex/AGENTS.md

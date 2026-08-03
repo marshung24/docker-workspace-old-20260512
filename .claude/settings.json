@@ -1,0 +1,35 @@
+{
+  "enabledPlugins": {
+    "postman@claude-plugins-official": true,
+    "document-skills@anthropic-agent-skills": true,
+    "mattpocock-skills@mattpocock": true,
+    "mh-external-advisor@marshung24": true,
+    "mh-agent-skills-builder@marshung24": true,
+    "mh-code-review@marshung24": true,
+    "telegram@claude-plugins-official": true
+  },
+  "extraKnownMarketplaces": {
+    "anthropic-agent-skills": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/skills"
+      }
+    },
+    "mattpocock": {
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills"
+      }
+    },
+    "marshung24": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/marshung24/ai-agent-skills.git"
+      }
+    }
+  },
+  "advisorModel": "opus",
+  "tui": "fullscreen",
+  "skipDangerousModePermissionPrompt": true,
+  "theme": "dark"
+}
