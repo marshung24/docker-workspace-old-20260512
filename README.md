@@ -150,7 +150,7 @@ Chromium 的通訊協定可能跟容器內 client 對不上），升版時兩處
 
 各 AI CLI 首次使用需在容器內登入（`claude` / `codex` / `opencode auth login` 等），憑證會保留在上述掛載中，重建容器不需重新登入。
 
-`configs/ssh/`、`configs/claude.json`、`.claude/`、`.codex/`、`.gemini/`、`.config/`、`workspace/` 內容已列入 `.gitignore`，不會進版控。
+`configs/ssh/`、`configs/claude.json`、`.claude/`、`.codex/`、`.gemini/`、`.config/`、`workspace/` 內容已列入 `.gitignore`，不會進版控。例外是 `.claude/CLAUDE.md`、`.codex/AGENTS.md`、`.gemini/GEMINI.md`、`.config/opencode/AGENTS.md` 四份全域指令檔，此 repo 有追蹤，內容改由 [mars-skills](https://github.com/marshung24/mars-skills) 納管，勿手動編輯。
 
 ## AI CLI 安裝位置
 
