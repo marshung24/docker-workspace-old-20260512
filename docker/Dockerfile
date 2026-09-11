@@ -27,6 +27,7 @@ RUN apt-get update && \
         graphviz \
         inotify-tools \
         direnv \
+        make \
         python3 python3-pip python3-venv python-is-python3 \
         openjdk-11-jdk openjdk-21-jdk maven \
         mysql-client redis-tools && \
@@ -106,16 +107,16 @@ RUN ARCH=$(dpkg --print-architecture) && \
 RUN curl -fsSL https://code-server.dev/install.sh | sh && \
     rm -rf /var/lib/apt/lists/* ~/.cache
 
-# 全域 shell 體驗：綠色 PS1、常用 alias、啟用 bash-completion、direnv hook
-# direnv hook 要掛在互動 shell 才會生效（cd 進目錄時自動 load/unload .envrc），
-# 非互動 shell（如 RUN、entrypoint exec）不受影響
+# 全域 shell 體驗：綠色 PS1、常用 alias、啟用 bash-completion、direnv hook、project-completion hook
+# DECISION: project-completion hook 要排在 direnv 後面（同一次 prompt 中 direnv 要先更新 PWD）
 RUN echo 'export PS1="\[\e[0;32m\]\u:\w\\$\[\e[0m\] "' >> /etc/bash.bashrc && \
     echo 'alias ll="ls -l"' >> /etc/bash.bashrc && \
     echo 'alias la="ls -la"' >> /etc/bash.bashrc && \
     echo 'if [ -f /usr/share/bash-completion/bash_completion ]; then' >> /etc/bash.bashrc && \
     echo '    . /usr/share/bash-completion/bash_completion' >> /etc/bash.bashrc && \
     echo 'fi' >> /etc/bash.bashrc && \
-    echo 'eval "$(direnv hook bash)"' >> /etc/bash.bashrc
+    echo 'eval "$(direnv hook bash)"' >> /etc/bash.bashrc && \
+    echo 'eval "$(project-completion hook bash)"' >> /etc/bash.bashrc
 
 # 建立使用者 mars（附加群組 admin / sudouser / sudo，免密碼 sudo）
 # DECISION: Ubuntu 24.04 基底映像內建 ubuntu 帳號佔用 UID/GID 1000，先移除以釋出
@@ -133,9 +134,13 @@ RUN userdel -r ubuntu 2>/dev/null || true && \
     chown "${UID}:${GID}" /srv
 
 # 容器啟動入口：修正 Docker socket 權限等初始化動作
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 ENTRYPOINT ["entrypoint.sh"]
+
+# project-completion（見 docs/tools/project-completion/README.md），裝系統路徑供全體使用者用
+COPY tools/system-plugins/project-completion.sh /usr/local/bin/project-completion
+RUN chmod +x /usr/local/bin/project-completion
 
 # 以 mars 身分安裝 AI Agent CLI（安裝腳本會裝到使用者家目錄）
 USER ${USERNAME}
@@ -150,12 +155,22 @@ RUN curl -fsSL https://opencode.ai/install | bash
 # bun — 不是給使用者直接用的 CLI，是 Claude Code telegram plugin 的 MCP server 執行環境
 # （plugin 內部用 `bun run` 啟動，缺這個 telegram MCP 會顯示 ENOENT: bun not found）
 RUN curl -fsSL https://bun.sh/install | bash
-# uv — tools/setting/dw（Python CLI，取代 Make）的 shebang 用 `uv run --script`
+# uv — tools/ops/dw（Python CLI，取代 Make）的 shebang 用 `uv run --script`
 # 依 PEP 723 inline metadata 自動建 venv、裝相依套件，不用手動 pip install
 RUN curl -fsSL https://astral.sh/uv/install.sh | sh
 
 # 將各 CLI 的使用者層安裝路徑加入 PATH（非互動 shell 也吃得到）
 ENV PATH="/home/${USERNAME}/.local/bin:/home/${USERNAME}/.opencode/bin:/home/${USERNAME}/.bun/bin:${PATH}"
+
+# AI Agent CLI 權限解放：本容器即沙盒邊界（bind mount 僅及既定路徑），互動時逐次核准
+# 工具權限沒有實益，四支 CLI 一律改用免確認旗標啟動
+# DECISION: 寫進 /etc/bash.bashrc（隨 image 重建、非 bind mount），不留在 mars-home
+#           volume 內手動加——旗標名稱各 CLI 自訂不同，非誤植：claude／agy 是「略過權限
+#           提示」，codex 是「略過核准並停用沙盒」，opencode 是「自動核准未明確拒絕的權限」
+RUN echo 'alias claude="claude --dangerously-skip-permissions"' >> /etc/bash.bashrc && \
+    echo 'alias codex="codex --dangerously-bypass-approvals-and-sandbox"' >> /etc/bash.bashrc && \
+    echo 'alias opencode="opencode --auto"' >> /etc/bash.bashrc && \
+    echo 'alias agy="agy --dangerously-skip-permissions"' >> /etc/bash.bashrc
 
 WORKDIR /srv
 
