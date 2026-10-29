@@ -16,7 +16,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     TZ=Asia/Taipei \
     LANG=C.UTF-8
 
-# 系統套件：基礎工具、網路診斷、Python 3、JDK 11/21、Maven、MySQL/Redis Client
+# 系統套件：基礎工具、網路診斷與除錯、編譯工具鏈、cron、Python 3、JDK 11/21、Maven、MySQL/Redis Client
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         ca-certificates gnupg sudo tzdata locales \
@@ -27,7 +27,9 @@ RUN apt-get update && \
         graphviz \
         inotify-tools \
         direnv \
-        make \
+        cron \
+        make build-essential \
+        lsof strace psmisc netcat-openbsd openssl file sqlite3 tmux ripgrep \
         python3 python3-pip python3-venv python-is-python3 \
         openjdk-11-jdk openjdk-21-jdk maven \
         mysql-client redis-tools && \

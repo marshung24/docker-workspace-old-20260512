@@ -14,6 +14,11 @@ if [ -S /var/run/docker.sock ]; then
     sudo chmod g+rw /var/run/docker.sock
 fi
 
+# 啟動 cron daemon（背景常駐，供 crontab 排程）
+# DECISION: 未採 supervisor／systemd，因容器以 init:true(tini) 為 PID 1，cron 自行 daemonize 即可；
+#           每次容器啟動只跑一次，無需冪等檢查
+sudo cron
+
 # 註冊 Playwright MCP server（若尚未註冊）
 # DECISION: 用 entrypoint 而非 Dockerfile RUN 註冊——`claude mcp add` 寫入的
 #           ~/.claude.json 是 bind mount（configs/claude.json，個人狀態不入版控），

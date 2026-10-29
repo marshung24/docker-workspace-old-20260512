@@ -11,7 +11,8 @@ Ubuntu 24.04 LTS 開發容器，內建 AI Agent CLI 與多語言工具鏈。
 | 工作目錄 | `/srv`（named volume `workspace`） |
 | AI CLI | Claude Code（`claude`）、Antigravity CLI（`agy`）、opencode、Codex（`codex`） |
 | Runtime | Node.js 22、Python 3、JDK 11 / 21（預設 21） |
-| 工具 | zip/unzip、curl/wget、git、GitHub CLI（`gh`）、GitLab CLI（`glab`）、mysql client、redis-tools、vim/nano、htop、tcpdump、inotify-tools、graphviz 等 |
+| 排程 | cron daemon 隨容器啟動，`crontab -e` 編輯 `mars` 的排程 |
+| 工具 | zip/unzip、curl/wget、git、GitHub CLI（`gh`）、GitLab CLI（`glab`）、mysql client、redis-tools、vim/nano、htop、tcpdump、inotify-tools、graphviz、build-essential、tmux、ripgrep、lsof、strace、sqlite3 等 |
 
 ## 使用方式
 
@@ -193,4 +194,6 @@ docker compose exec workspace bash -c "cd /srv/some-project && git push"
 
 - **`docker compose down -v` 會連 `workspace` volume（`/srv` 的工作成果）一起刪除**，執行前務必先 push 或備份；只想重置家目錄時用 `docker volume rm docker-workspace_mars-home` 單獨刪。
 - 重建映像（`--build`）不會清掉 named volume。
+- **crontab 不持久化**：排程存於容器本機（`/var/spool/cron/crontabs`），容器重建（`down`／`--build` 後 `up`）即消失，`restart` 不受影響；`workspace` 與 `code-server` 各有獨立 crontab。要保留請把內容備份進 `/srv`（`crontab -l > /srv/crontab.bak`，還原用 `crontab /srv/crontab.bak`）。
+- cron 任務環境精簡：`PATH` 只有 `/usr/bin:/bin`（不含 `~/.local/bin` 等 CLI 路徑，請寫絕對路徑或在 crontab 頂端設 `PATH=`）；無 MTA、無 syslog，任務輸出請自行導向檔案（`>> /srv/job.log 2>&1`）。
 - 容器內連宿主機服務（MySQL/Redis 等）用 `host.docker.internal`。
